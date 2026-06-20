@@ -1,6 +1,6 @@
 {
-  "id": "abdulbasit3397/sports-pipeline-test",
-  "title": "Sports Pipeline Test",
+  "id": "abdulbasit3397/sports-detect-test",
+  "title": "Sports Detect Test",
   "code_file": "kernel.py",
   "language": "python",
   "kernel_type": "script",
