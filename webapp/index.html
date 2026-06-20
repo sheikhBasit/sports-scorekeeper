@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#111">
+<title>Sports AI Scorekeeper</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#111;--surface:#1e1e1e;--surface2:#2a2a2a;--border:#333;
+  --accent:#4ade80;--accent2:#facc15;--text:#f0f0f0;--muted:#888;
+  --a1:#ff9626;--a2:#ffb86c;--b1:#3cdc3c;--b2:#86efac;
+  --ball:#3cf0ff;--red:#ef4444;
+  --radius:12px;--font:system-ui,-apple-system,sans-serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden}
+.page{display:none;height:100%;flex-direction:column;overflow-y:auto}
+.page.active{display:flex}
+
+/* nav */
+nav{display:flex;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+nav button{flex:1;padding:10px 4px;background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;transition:.15s}
+nav button.active{color:var(--accent);border-bottom:2px solid var(--accent)}
+
+/* common */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin:12px}
+h2{font-size:18px;font-weight:700;margin-bottom:12px}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;margin-top:10px}
+input,select{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+.btn{display:block;width:100%;padding:14px;border:none;border-radius:var(--radius);font-size:16px;font-weight:600;cursor:pointer;transition:.15s;margin-top:10px}
+.btn-primary{background:var(--accent);color:#000}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-danger{background:var(--red);color:#fff}
+.btn:active{opacity:.8}
+.row{display:flex;gap:8px}
+.row .btn{margin-top:0}
+
+/* sport selector grid */
+#sport-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.sport-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 8px;background:var(--surface2);border:2px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:.15s;font-size:13px;font-weight:600;color:var(--text)}
+.sport-btn .sport-emoji{font-size:28px}
+.sport-btn.selected{border-color:var(--accent);background:#14532d22;color:var(--accent)}
+.sport-btn:active{opacity:.8}
+
+/* score bar — generic container */
+#score-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 12px;flex-shrink:0}
+.score-main-row{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.team-side{display:flex;flex-direction:column;gap:2px}
+.team-side.right{align-items:flex-end}
+.team-name{font-size:12px;color:var(--muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-name.serving{color:var(--accent);font-weight:700}
+.score-block{display:flex;align-items:baseline;gap:5px}
+.pts-num{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums}
+.games-num{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent2)}
+.sets-row{display:flex;gap:3px;align-items:center}
+.set-box{width:18px;height:18px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.set-box.won{background:var(--accent2);color:#000;border-color:var(--accent2)}
+.score-sep-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+.score-sep{font-size:22px;color:var(--muted)}
+.rally-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:99px;background:var(--surface2)}
+.rally-badge.active{background:#14532d;color:var(--accent)}
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);vertical-align:middle;white-space:nowrap}
+.sub-score{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* award buttons */
+#award-row{display:flex;gap:8px;padding:8px 12px 4px;flex-shrink:0}
+#award-row button{flex:1;padding:10px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:.15s}
+#btn-award-a{background:var(--a1);color:#000}
+#btn-award-b{background:var(--b1);color:#000}
+#award-row button:active{opacity:.75}
+
+/* radar canvas */
+#radar-wrap{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0d0d0d;min-height:0;position:relative}
+#radar{display:block;max-width:100%;max-height:100%}
+
+/* speed hud */
+#speed-hud{background:var(--surface);border-top:1px solid var(--border);padding:10px 16px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between}
+.speed-val{font-size:28px;font-weight:800;color:var(--ball);font-variant-numeric:tabular-nums}
+.speed-label{font-size:11px;color:var(--muted)}
+
+/* rally log */
+#rally-log{max-height:72px;overflow-y:auto;padding:0 16px 6px;flex-shrink:0}
+.rally-item{font-size:12px;color:var(--muted);padding:3px 0;border-bottom:1px solid var(--border)}
+.rally-item .winner{font-weight:700;color:var(--text)}
+
+/* camera page */
+#cam-status{font-size:42px;font-weight:800;text-align:center;padding:20px}
+.stat-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:14px}
+.stat-val{font-weight:600;color:var(--accent)}
+
+/* calibrate */
+#calib-wrap{position:relative;width:100%;background:#000;flex:1;min-height:0}
+#calib-video{width:100%;height:100%;object-fit:cover}
+#calib-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+#calib-hint{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);padding:10px 16px;text-align:center;font-size:13px}
+
+/* history */
+.game-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin:10px 12px}
+.game-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.game-score{font-size:20px;font-weight:800}
+.game-date{font-size:11px;color:var(--muted)}
+.game-stats{display:flex;gap:16px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.game-stats span b{color:var(--text)}
+
+/* match over overlay */
+#match-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px}
+#match-overlay.show{display:flex}
+#match-overlay h1{font-size:36px;font-weight:900;color:var(--accent);margin-bottom:8px}
+#match-overlay p{color:var(--muted);margin-bottom:24px}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="main-nav" style="display:none">
+  <button data-page="display" onclick="go('display')">📺 Display</button>
+  <button data-page="camera"  onclick="go('camera')">📷 Camera</button>
+  <button data-page="history" onclick="go('history')">📋 Records</button>
+  <button data-page="home"    onclick="go('home')">⚙️ Setup</button>
+</nav>
+
+<!-- HOME / SETUP -->
+<div id="page-home" class="page active">
+  <div class="card">
+    <h2>🏟️ Sports AI Scorekeeper</h2>
+
+    <label>Select Sport</label>
+    <div id="sport-grid"></div>
+
+    <div id="team-fields" style="display:none">
+      <label>Team A name</label>
+      <input id="name-a" value="Team A">
+      <label>Team B name</label>
+      <input id="name-b" value="Team B">
+
+      <div id="first-server-wrap" style="display:none">
+        <label>First server</label>
+        <select id="first-server">
+          <option value="A">Team A</option>
+          <option value="B">Team B</option>
+        </select>
+      </div>
+
+      <div id="golden-point-wrap" style="display:none">
+        <label>Golden Point (tennis)</label>
+        <select id="golden-point">
+          <option value="false">No</option>
+          <option value="true">Yes</option>
+        </select>
+      </div>
+
+      <button class="btn btn-primary" onclick="doSetup()" style="margin-top:20px">Connect &amp; Calibrate Court →</button>
+      <button class="btn btn-secondary" onclick="skipCalib()" style="margin-top:8px">Skip calibration (use saved)</button>
+    </div>
+  </div>
+</div>
+
+<!-- CALIBRATE -->
+<div id="page-calibrate" class="page">
+  <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:13px;color:var(--muted)">
+    Tap the <b style="color:var(--text)">4 outer court corners</b>: <span style="color:#3b82f6">TL</span> → <span style="color:#22c55e">TR</span> → <span style="color:#ef4444">BR</span> → <span style="color:#f59e0b">BL</span>
+  </div>
+  <div id="calib-wrap">
+    <video id="calib-video" autoplay playsinline muted></video>
+    <canvas id="calib-overlay"></canvas>
+    <div id="calib-hint">Point camera at the full court, then tap corners</div>
+  </div>
+  <div style="padding:12px;display:flex;gap:8px">
+    <button class="btn btn-secondary" onclick="calibReset()">Reset</button>
+    <button class="btn btn-primary" id="calib-confirm" onclick="calibConfirm()" disabled>Confirm (0/4)</button>
+  </div>
+</div>
+
+<!-- CAMERA -->
+<div id="page-camera" class="page">
+  <div class="card">
+    <h2>📷 Camera Streaming</h2>
+    <div id="cam-status">⏸</div>
+    <div class="stat-row"><span>Status</span><span class="stat-val" id="st-status">Idle</span></div>
+    <div class="stat-row"><span>Frames sent</span><span class="stat-val" id="st-frames">0</span></div>
+    <div class="stat-row"><span>Latency</span><span class="stat-val" id="st-lat">—</span></div>
+    <div class="stat-row"><span>Players detected</span><span class="stat-val" id="st-players">—</span></div>
+    <div class="stat-row"><span>Ball</span><span class="stat-val" id="st-ball">—</span></div>
+    <div class="stat-row"><span>Score</span><span class="stat-val" id="st-score">—</span></div>
+    <button class="btn btn-primary"  id="cam-start" onclick="startCamera()">▶ Start Streaming</button>
+    <button class="btn btn-danger"   id="cam-stop"  onclick="stopCamera()" style="display:none">■ Stop</button>
+  </div>
+</div>
+
+<!-- DISPLAY -->
+<div id="page-display" class="page">
+  <div id="score-bar">
+    <div class="score-main-row" id="score-main-row">
+      <!-- dynamically rendered by renderScoreBar() -->
+    </div>
+  </div>
+
+  <!-- Manual point award buttons -->
+  <div id="award-row">
+    <button id="btn-award-a" onclick="awardPoint('A')">+A</button>
+    <button id="btn-award-b" onclick="awardPoint('B')">+B</button>
+  </div>
+
+  <div id="radar-wrap">
+    <img id="video-frame" style="display:none;width:100%;height:100%;object-fit:contain;position:absolute;top:0;left:0;z-index:1">
+    <canvas id="radar" style="position:relative;z-index:1"></canvas>
+    <button id="view-toggle" onclick="toggleView()"
+      style="position:absolute;top:8px;right:8px;z-index:2;background:rgba(0,0,0,.6);border:1px solid #555;color:#fff;font-size:11px;padding:4px 10px;border-radius:8px;cursor:pointer">
+      📷 Video
+    </button>
+  </div>
+
+  <div id="speed-hud">
+    <div>
+      <div class="speed-label">BALL SPEED</div>
+      <div class="speed-val" id="d-speed">— km/h</div>
+    </div>
+    <div style="text-align:right;font-size:12px;color:var(--muted)" id="d-extra-info"></div>
+  </div>
+
+  <div id="rally-log"></div>
+</div>
+
+<!-- HISTORY / RECORDS -->
+<div id="page-history" class="page">
+  <div style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Match Records</h2>
+    <button class="btn btn-secondary" style="width:auto;padding:6px 14px;font-size:13px;margin:0" onclick="loadHistory()">↻ Refresh</button>
+  </div>
+  <div id="history-list" style="padding-bottom:20px"></div>
+</div>
+
+<!-- MATCH OVER OVERLAY -->
+<div id="match-overlay">
+  <h1 id="mo-winner">Team A Wins!</h1>
+  <p id="mo-score">2 – 1</p>
+  <button class="btn btn-primary"  style="width:220px" onclick="newGame()">New Match</button>
+  <button class="btn btn-secondary" style="width:220px" onclick="closeOverlay()">View Records</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// SPORT CONFIGS
+// ═══════════════════════════════════════════════════════════════
+const SPORTS = {
+  soccer:       { name:'Soccer',       emoji:'⚽', w:68,    l:105,   shape:'rect',    scoreType:'goals',   teams:['A','B'] },
+  basketball:   { name:'Basketball',   emoji:'🏀', w:15.24, l:28,    shape:'rect',    scoreType:'points',  teams:['A','B'] },
+  volleyball:   { name:'Volleyball',   emoji:'🏐', w:9,     l:18,    shape:'rect',    scoreType:'sets',    teams:['A','B'] },
+  tennis:       { name:'Tennis',       emoji:'🎾', w:10.97, l:23.77, shape:'rect',    scoreType:'tennis',  teams:['A','B'] },
+  table_tennis: { name:'Table Tennis', emoji:'🏓', w:1.525, l:2.74,  shape:'rect',    scoreType:'tt',      teams:['A','B'] },
+  fencing:      { name:'Fencing',      emoji:'🤺', w:2,     l:14,    shape:'rect',    scoreType:'touches', teams:['A','B'] },
+  baseball:     { name:'Baseball',     emoji:'⚾', w:27.43, l:27.43, shape:'diamond', scoreType:'runs_bb', teams:['A','B'] },
+  cricket:      { name:'Cricket',      emoji:'🏏', w:20,    l:20,    shape:'rect',    scoreType:'runs_cr', teams:['A','B'] },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+const A1_COLOR = '#ff9626', A2_COLOR = '#ffb86c';
+const B1_COLOR = '#3cdc3c', B2_COLOR = '#86efac';
+const BALL_COLOR = '#3cf0ff';
+const TRAIL_LEN = 12;
+const MARGIN = 20;
+const TENNIS_PTS = ['0','15','30','40'];
+
+// Sports that need first-server selector
+const NEEDS_SERVER = new Set(['tennis','table_tennis']);
+// Sport that needs golden point
+const NEEDS_GOLDEN = new Set(['tennis']);
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+const S = {
+  serverUrl: window.location.origin,
+  selectedSport: localStorage.getItem('selectedSport') || 'soccer',
+  nameA: localStorage.getItem('nameA') || 'Team A',
+  nameB: localStorage.getItem('nameB') || 'Team B',
+  ws: null,
+  cameraStream: null,
+  cameraTimer: null,
+  frameCount: 0,
+  corners: JSON.parse(localStorage.getItem('corners') || 'null'),
+  players: [],
+  ball: null,
+  score: {},
+  speedKmh: null,
+  rallyActive: false,
+  trails: {},
+  rallyLog: [],
+  matchSaved: false,
+  peakSpeed: 0,
+  rallyCount: 0,
+  matchStartTime: null,
+  viewMode: 'radar',
+};
+
+// ═══════════════════════════════════════════════════════════════
+// ROUTING
+// ═══════════════════════════════════════════════════════════════
+let currentPage = 'home';
+function go(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  const nb = document.querySelector(`nav button[data-page="${page}"]`);
+  if (nb) nb.classList.add('active');
+  currentPage = page;
+  if (page === 'display') initRadarCanvas();
+  if (page === 'history') loadHistory();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SPORT SELECTOR
+// ═══════════════════════════════════════════════════════════════
+function buildSportGrid() {
+  const grid = document.getElementById('sport-grid');
+  grid.innerHTML = Object.entries(SPORTS).map(([key, sp]) =>
+    `<button class="sport-btn${S.selectedSport===key?' selected':''}" onclick="selectSport('${key}')">
+       <span class="sport-emoji">${sp.emoji}</span>
+       <span>${sp.name}</span>
+     </button>`
+  ).join('');
+}
+
+function selectSport(key) {
+  S.selectedSport = key;
+  localStorage.setItem('selectedSport', key);
+  document.querySelectorAll('.sport-btn').forEach(b => b.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  document.getElementById('team-fields').style.display = 'block';
+  // Show/hide server selector
+  document.getElementById('first-server-wrap').style.display = NEEDS_SERVER.has(key) ? 'block' : 'none';
+  // Show/hide golden point
+  document.getElementById('golden-point-wrap').style.display = NEEDS_GOLDEN.has(key) ? 'block' : 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HOME / SETUP
+// ═══════════════════════════════════════════════════════════════
+function doSetup() {
+  S.nameA = document.getElementById('name-a').value || 'Team A';
+  S.nameB = document.getElementById('name-b').value || 'Team B';
+  localStorage.setItem('nameA', S.nameA);
+  localStorage.setItem('nameB', S.nameB);
+  document.getElementById('main-nav').style.display = 'flex';
+  startCalibration();
+}
+
+function skipCalib() {
+  S.nameA = document.getElementById('name-a').value || 'Team A';
+  S.nameB = document.getElementById('name-b').value || 'Team B';
+  document.getElementById('main-nav').style.display = 'flex';
+  if (S.corners) {
+    sendCalibration().then(() => go('display'));
+  } else {
+    go('display');
+  }
+  connectDisplay();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CALIBRATION
+// ═══════════════════════════════════════════════════════════════
+let calibCorners = [];
+const CORNER_COLORS = ['#3b82f6','#22c55e','#ef4444','#f59e0b'];
+const CORNER_LABELS = ['TL','TR','BR','BL'];
+
+function startCalibration() {
+  calibCorners = [];
+  go('calibrate');
+  const video = document.getElementById('calib-video');
+  const overlay = document.getElementById('calib-overlay');
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}},audio:false})
+    .then(stream => {
+      S.cameraStream = stream;
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        overlay.width  = video.offsetWidth;
+        overlay.height = video.offsetHeight;
+        calibDrawDots();
+      };
+    })
+    .catch(e => { alert('Camera error: ' + e.message); go('home'); });
+
+  const wrap = document.getElementById('calib-wrap');
+  wrap.onclick = (e) => {
+    if (calibCorners.length >= 4) return;
+    const rect = video.getBoundingClientRect();
+    const scaleX = video.videoWidth / rect.width;
+    const scaleY = video.videoHeight / rect.height;
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top) * scaleY);
+    calibCorners.push([x, y]);
+    calibDrawDots();
+    const btn = document.getElementById('calib-confirm');
+    btn.textContent = `Confirm (${calibCorners.length}/4)`;
+    btn.disabled = calibCorners.length < 4;
+    const hints = ['Tap Top-Right corner','Tap Bottom-Right corner','Tap Bottom-Left corner','All 4 set — tap Confirm'];
+    document.getElementById('calib-hint').textContent = hints[calibCorners.length - 1] || 'Tap Top-Left corner';
+  };
+}
+
+function calibDrawDots() {
+  const overlay = document.getElementById('calib-overlay');
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  const video = document.getElementById('calib-video');
+  const rect = video.getBoundingClientRect();
+  const sx = rect.width / video.videoWidth, sy = rect.height / video.videoHeight;
+  calibCorners.forEach(([x, y], i) => {
+    const dx = x * sx, dy = y * sy;
+    ctx.beginPath(); ctx.arc(dx, dy, 14, 0, Math.PI * 2);
+    ctx.fillStyle = CORNER_COLORS[i] + '55'; ctx.fill();
+    ctx.strokeStyle = CORNER_COLORS[i]; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(CORNER_LABELS[i], dx, dy);
+  });
+}
+
+function calibReset() {
+  calibCorners = [];
+  calibDrawDots();
+  document.getElementById('calib-confirm').textContent = 'Confirm (0/4)';
+  document.getElementById('calib-confirm').disabled = true;
+  document.getElementById('calib-hint').textContent = 'Tap Top-Left corner';
+}
+
+async function calibConfirm() {
+  if (calibCorners.length < 4) return;
+  const video = document.getElementById('calib-video');
+  S.corners = calibCorners;
+  localStorage.setItem('corners', JSON.stringify(S.corners));
+  localStorage.setItem('frameW', video.videoWidth);
+  localStorage.setItem('frameH', video.videoHeight);
+  if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  await sendCalibration();
+  connectDisplay();
+  go('camera');
+  document.getElementById('main-nav').style.display = 'flex';
+}
+
+async function sendCalibration() {
+  const fw = parseInt(localStorage.getItem('frameW') || 854);
+  const fh = parseInt(localStorage.getItem('frameH') || 480);
+  const goldenPoint = (document.getElementById('golden-point')?.value === 'true');
+  const firstServer = document.getElementById('first-server')?.value || 'A';
+  const body = {
+    sport: S.selectedSport,
+    corners: S.corners,
+    frame_w: fw, frame_h: fh,
+    name_a: S.nameA, name_b: S.nameB,
+    first_server: firstServer,
+    fps: 10,
+    golden_point: goldenPoint,
+    model: 'yolo11n.pt', conf: 0.25, court_margin: 0.4,
+  };
+  try {
+    const r = await fetch(S.serverUrl + '/calibrate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    S.matchStartTime = Date.now();
+    S.matchSaved = false; S.peakSpeed = 0; S.rallyCount = 0;
+    console.log('[calibrate] ok');
+  } catch (e) {
+    alert('Calibration failed: ' + e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CAMERA STREAMING
+// ═══════════════════════════════════════════════════════════════
+let camVideo = null;
+
+async function startCamera() {
+  try {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {facingMode:{ideal:'environment'}, width:{ideal:640}, height:{ideal:360}},
+        audio: false,
+      });
+    } catch (_) {
+      stream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+    }
+    S.cameraStream = stream;
+    camVideo = document.createElement('video');
+    camVideo.srcObject = stream; camVideo.autoplay = true; camVideo.muted = true; camVideo.playsInline = true;
+    await new Promise(r => camVideo.onloadedmetadata = r);
+    camVideo.play();
+
+    document.getElementById('cam-start').style.display = 'none';
+    document.getElementById('cam-stop').style.display = 'block';
+    document.getElementById('cam-status').textContent = '🔴';
+    document.getElementById('st-status').textContent = 'Streaming';
+
+    const SEND_W = 480, SEND_H = Math.round(480 * camVideo.videoHeight / camVideo.videoWidth);
+    const canvas = document.createElement('canvas');
+    canvas.width = SEND_W; canvas.height = SEND_H;
+    const ctx = canvas.getContext('2d');
+    const FPS = 10;
+
+    S.cameraTimer = setInterval(async () => {
+      if (!camVideo || camVideo.readyState < 2) return;
+      ctx.drawImage(camVideo, 0, 0, SEND_W, SEND_H);
+      canvas.toBlob(async blob => {
+        if (!blob) return;
+        const t0 = Date.now();
+        try {
+          const fd = new FormData();
+          fd.append('file', blob, 'frame.jpg');
+          const r = await fetch(S.serverUrl + '/frame', {method:'POST', body:fd});
+          const result = await r.json();
+          const lat = Date.now() - t0;
+          S.frameCount++;
+          document.getElementById('st-frames').textContent = S.frameCount;
+          document.getElementById('st-lat').textContent = lat + 'ms';
+          document.getElementById('st-players').textContent = result.players?.length ?? 0;
+          document.getElementById('st-ball').textContent = result.ball ? '✓' : '—';
+          document.getElementById('st-score').textContent = scoreOneLiner(result.score);
+        } catch (e) {
+          document.getElementById('st-status').textContent = 'Error: ' + e.message;
+        }
+      }, 'image/jpeg', 0.75);
+    }, 1000 / FPS);
+  } catch (e) {
+    const msg = e.name === 'NotAllowedError'  ? 'Camera permission denied — allow camera in browser settings.' :
+                e.name === 'NotReadableError' ? 'Camera busy — close other apps using the camera.' :
+                e.name === 'NotFoundError'    ? 'No camera found on this device.' :
+                'Camera error: ' + e.message;
+    alert(msg);
+    document.getElementById('cam-status').textContent = '❌';
+    document.getElementById('st-status').textContent = 'Error';
+  }
+}
+
+function stopCamera() {
+  clearInterval(S.cameraTimer); S.cameraTimer = null;
+  if (S.cameraStream) { S.cameraStream.getTracks().forEach(t => t.stop()); S.cameraStream = null; }
+  if (camVideo) { camVideo.srcObject = null; camVideo = null; }
+  document.getElementById('cam-start').style.display = 'block';
+  document.getElementById('cam-stop').style.display = 'none';
+  document.getElementById('cam-status').textContent = '⏸';
+  document.getElementById('st-status').textContent = 'Idle';
+}
+
+function scoreOneLiner(sc) {
+  if (!sc) return '—';
+  const st = SPORTS[S.selectedSport]?.scoreType || 'goals';
+  if (st === 'goals' || st === 'touches' || st === 'points') return `${sc.a??0}–${sc.b??0}`;
+  if (st === 'tennis') return `${sc.sets_a??0}–${sc.sets_b??0} sets, ${sc.a??0}–${sc.b??0} games`;
+  return `${sc.score_a??sc.a??0}–${sc.score_b??sc.b??0}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WEBSOCKET DISPLAY
+// ═══════════════════════════════════════════════════════════════
+function connectDisplay() {
+  if (!S.serverUrl) return;
+  if (S.ws && S.ws.readyState <= 1) return;
+  const wsUrl = S.serverUrl.replace(/^https/, 'wss').replace(/^http/, 'ws') + '/ws';
+  console.log('[ws] connecting to', wsUrl);
+  S.ws = new WebSocket(wsUrl);
+  S.ws.onopen = () => console.log('[ws] connected');
+  S.ws.onmessage = e => onResult(JSON.parse(e.data));
+  S.ws.onclose = () => { console.log('[ws] closed — retry in 3s'); setTimeout(connectDisplay, 3000); };
+  S.ws.onerror = e => console.error('[ws] error', e);
+}
+
+function onResult(r) {
+  S.players = r.players || [];
+  S.ball = r.ball || null;
+  S.score = r.score || S.score;
+  S.speedKmh = r.speed_kmh ?? null;
+  S.rallyActive = r.rally_active || false;
+  if (S.speedKmh && S.speedKmh > S.peakSpeed) S.peakSpeed = S.speedKmh;
+
+  if (r.rally_ended) {
+    S.rallyCount++;
+    const sc = S.score;
+    const winnerName = sc.server === 'A' ? (sc.name_a || S.nameA) : (sc.name_b || S.nameB);
+    S.rallyLog.unshift({n: S.rallyCount, winner: winnerName, speed: S.speedKmh});
+    if (S.rallyLog.length > 20) S.rallyLog.pop();
+    updateRallyLog();
+  }
+
+  for (const p of S.players) {
+    if (!S.trails[p.tid]) S.trails[p.tid] = [];
+    S.trails[p.tid].push({x: p.x_m, y: p.y_m});
+    if (S.trails[p.tid].length > TRAIL_LEN) S.trails[p.tid].shift();
+  }
+
+  renderScoreBar();
+  updateSpeedHud();
+  drawRadar();
+
+  if (r.frame_b64) {
+    const img = document.getElementById('video-frame');
+    img.src = 'data:image/jpeg;base64,' + r.frame_b64;
+    if (S.viewMode !== 'video') toggleView();
+  }
+
+  if (r.score?.match_over && !S.matchSaved) {
+    S.matchSaved = true;
+    saveMatchRecord(r);
+    showMatchOver(r);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MANUAL AWARD
+// ═══════════════════════════════════════════════════════════════
+async function awardPoint(winner) {
+  try {
+    await fetch(S.serverUrl + '/award', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({winner}),
+    });
+  } catch (e) {
+    console.warn('Award failed:', e);
+  }
+  // Update award button labels with team names for clarity
+  updateAwardButtons();
+}
+
+function updateAwardButtons() {
+  const na = S.score?.name_a || S.nameA;
+  const nb = S.score?.name_b || S.nameB;
+  document.getElementById('btn-award-a').textContent = `+${na.slice(0,10)}`;
+  document.getElementById('btn-award-b').textContent = `+${nb.slice(0,10)}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VIEW TOGGLE (video / radar)
+// ═══════════════════════════════════════════════════════════════
+function toggleView() {
+  S.viewMode = S.viewMode === 'radar' ? 'video' : 'radar';
+  const btn = document.getElementById('view-toggle');
+  const img = document.getElementById('video-frame');
+  const canvas = document.getElementById('radar');
+  if (S.viewMode === 'video') {
+    img.style.display = 'block';
+    canvas.style.display = 'none';
+    btn.textContent = '📡 Radar';
+  } else {
+    img.style.display = 'none';
+    canvas.style.display = 'block';
+    btn.textContent = '📷 Video';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCORE BAR — adaptive per scoreType
+// ═══════════════════════════════════════════════════════════════
+function fmtTennisPts(raw, inTiebreak) {
+  if (inTiebreak) return String(raw ?? 0);
+  return TENNIS_PTS[Math.min(raw ?? 0, 3)] ?? String(raw ?? 0);
+}
+
+function setBoxes(n, total) {
+  let html = '';
+  const show = Math.max(n + 1, total + 1, 2);
+  for (let i = 0; i < show; i++) {
+    const won = i < n;
+    html += `<div class="set-box${won?' won':''}">${won?'✓':''}</div>`;
+  }
+  return html;
+}
+
+function renderScoreBar() {
+  const sc = S.score || {};
+  const na = sc.name_a || S.nameA;
+  const nb = sc.name_b || S.nameB;
+  const sport = SPORTS[S.selectedSport] || SPORTS.soccer;
+  const st = sport.scoreType;
+  const row = document.getElementById('score-main-row');
+  let html = '';
+
+  if (st === 'goals') {
+    // A  2  –  1  B
+    html = `
+      <div class="team-side">
+        <div class="team-name" style="color:var(--a1)">${na}</div>
+        <div class="score-block"><span class="pts-num" style="color:var(--a1)">${sc.a??0}</span></div>
+      </div>
+      <div class="score-sep-col">
+        <div class="score-sep">–</div>
+        <div><span class="rally-badge${S.rallyActive?' active':''}">${S.rallyActive?'● Rally':'○ Idle'}</span></div>
+      </div>
+      <div class="team-side right">
+        <div class="team-name" style="color:var(--b1)">${nb}</div>
+        <div class="score-block"><span class="pts-num" style="color:var(--b1)">${sc.b??0}</span></div>
+      </div>`;
+
+  } else if (st === 'points') {
+    // A  45  –  38  B   Q2
+    const quarter = sc.quarter ? `<span class="badge" style="margin-left:4px">Q${sc.quarter}</span>` : '';
+    html = `
+      <div class="team-side">
+        <div class="team-name" style="color:var(--a1)">${na}</div>
+        <div class="score-block"><span class="pts-num" style="color:var(--a1)">${sc.a??0}</span></div>
+      </div>
+      <div class="score-sep-col">
+        <div class="score-sep">–</div>
+        ${quarter}
+        <div><span class="rally-badge${S.rallyActive?' active':''}">${S.rallyActive?'●':'○'}</span></div>
+      </div>
+      <div class="team-side right">
+        <div class="team-name" style="color:var(--b1)">${nb}</div>
+        <div class="score-block"><span class="pts-num" style="color:var(--b1)">${sc.b??0}</span></div>
+      </div>`;
+
+  } else if (st === 'sets') {
+    // Volleyball: A [2] 25·18 – 23·21 [1] B  Set 3  (pts: 14–11)
+    const setsA = sc.sets_a ?? 0, setsB = sc.sets_b ?? 0;
+    const setScores = (sc.set_scores || []);
+    const prevGames = setScores.map(s => `${s[0]}·${s[1]}`).join(' ');
+    const curPts = sc.pts_a != null ? `(pts: ${sc.pts_a}–${sc.pts_b})` : '';
+    const setNo = setsA + setsB + 1;
+    html = `
+      <div class="team-side">
+        <div class="team-name" style="color:var(--a1)">${na}</div>
+        <div class="score-block">
+          <span class="games-num" style="color:var(--accent2)">[${setsA}]</span>
+          <span class="pts-num" style="color:var(--a1);font-size:22px">${prevGames.split('–').map(s=>s.split('·')[0]).join('·')}</span>
+        </div>
+        <div class="sub-score">${prevGames}</div>
+      </div>
+      <div class="score-sep-col">
+        <div class="score-sep">–</div>
+        <div style="font-size:11px;color:var(--muted)">Set ${setNo}</div>
+        <div style="font-size:10px;color:var(--muted)">${curPts}</div>
+      </div>
+      <div class="team-side right">
+        <div class="team-name" style="color:var(--b1)">${nb}</div>
+        <div class="score-block" style="flex-direction:row-reverse">
+          <span class="games-num" style="color:var(--accent2)">[${setsB}]</span>
+        </div>
+      </div>`;
+
+  } else if (st === 'tennis') {
+    // A [1] 4  30 – 15  3 [0] B
+    const setsA = sc.sets_a ?? 0, setsB = sc.sets_b ?? 0;
+    const totalSets = setsA + setsB;
+    const gA = sc.a ?? 0, gB = sc.b ?? 0;
+    const pA = fmtTennisPts(sc.pts_a, sc.in_tiebreak);
+    const pB = fmtTennisPts(sc.pts_b, sc.in_tiebreak);
+    const tieLabel = sc.in_tiebreak ? '<div style="font-size:10px;color:var(--accent2)">TB</div>' : '';
+    const servA = sc.server === 'A' ? '★ ' : '';
+    const servB = sc.server === 'B' ? ' ★' : '';
+    html = `
+      <div class="team-side">
+        <div class="team-name${sc.server==='A'?' serving':''}" style="color:var(--a1)">${servA}${na}</div>
+        <div class="score-block">
+          <div class="sets-row">${setBoxes(setsA, totalSets)}</div>
+          <span class="games-num" style="color:var(--a1)">${gA}</span>
+          <span class="pts-num" style="color:var(--a1)">${pA}</span>
+        </div>
+      </div>
+      <div class="score-sep-col">
+        <div class="score-sep">–</div>
+        ${tieLabel}
+        <div><span class="rally-badge${S.rallyActive?' active':''}">${S.rallyActive?'●':'○'}</span></div>
+      </div>
+      <div class="team-side right">
+        <div class="team-name${sc.server==='B'?' serving':''}" style="color:var(--b1)">${nb}${servB}</div>
+        <div class="score-block" style="flex-direction:row-reverse">
+          <div class="sets-row">${setBoxes(setsB, totalSets)}</div>
+          <span class="games-num" style="color:var(--b1)">${gB}</span>
+          <span class="pts-num" style="color:var(--b1)">${pB}</span>
+        </div>
+      </div>`;
+
+  } else if (st === 'tt') {
+    // Table Tennis: A [3] 11·9 – 8·11 [2] B  G5  11–8
+    const gA = sc.games_a ?? 0, gB = sc.games_b ?? 0;
+    const lastScores = (sc.game_scores || []).slice(-2).map(s => `${s[0]}·${s[1]}`).join(' ');
+    const curPts = sc.pts_a != null ? `${sc.pts_a}–${sc.pts_b}` : '';
+    const gameNo = gA + gB + 1;
+    const servA = sc.server === 'A' ? '★ ' : '';
+    const servB = sc.server === 'B' ? ' ★' : '';
+    html = `
+      <div class="team-side">
+        <div class="team-name${sc.server==='A'?' serving':''}" style="color:var(--a1)">${servA}${na}</div>
+        <div class="score-block">
+          <span class="games-num" style="color:var(--accent2)">[${gA}]</span>
+          <span class="pts-num" style="color:var(--a1);font-size:24px">${sc.pts_a??0}</span>
+        </div>
+        <div class="sub-score">${lastScores}</div>
+      </div>
+      <div class="score-sep-col">
+        <div class="score-sep">–</div>
+        <div style="font-size:11px;color:var(--muted)">G${gameNo}</div>
+        <div style="font-size:10px;color:var(--muted)">${curPts}</div>
+      </div>
+      <div class="team-side right">
+        <div class="team-name${sc.server==='B'?' serving':''}" style="color:var(--b1)">${nb}${servB}</div>
+        <div class="score-block" style="flex-direction:row-reverse">
+          <span class="games-num" style="color:var(--accent2)">[${gB}]</span>
+          <span class="pts-num" style="color:var(--b1);font-size:24px">${sc.pts_b??0}</span>
+        </div>
+      </div>`;
+
+  } else if (st === 'touches') {
+    // Fencing: A  3  –  2  B   /5
+    const target = sc.target ?? 5;
+    html = `
+      <div class="team-side">
+        <div class="team-name" style="color:var(--a1)">${na}</div>
+        <div class="score-block"><span class="pts-num" style="color:var(--a1)">${sc.a??0}</span></div>
+      </div>
+      <div class="score-sep-col">
+        <div class="score-sep">–</div>
+        <div style="font-size:12px;color:var(--muted)">/${target}</div>
+        <div><span class="rally-badge${S.rallyActive?' active':''}">${S.rallyActive?'●':'○'}</span></div>
+      </div>
+      <div class="team-side right">
+        <div class="team-name" style="color:var(--b1)">${nb}</div>
+        <div class="score-block"><span class="pts-num" style="color:var(--b1)">${sc.b??0}</span></div>
+      </div>`;
+
+  } else if (st === 'runs_bb') {
+    // Baseball: A 4 – 3 B  Inn 3 ▲  ••  (2 out)
+    const inn = sc.inning ?? 1;
+    const half = sc.half === 'top' ? '▲' : '▼';
+    const outs = sc.outs ?? 0;
+    const outDots = '●'.repeat(outs) + '○'.repeat(Math.max(0, 3 - outs));
+    const bases = sc.bases ?? [false, false, false];
+    const baseDots = bases.map(b => b ? '◆' : '◇').join('');
+    html = `
+      <div class="team-side">
+        <div class="team-name" style="color:var(--a1)">${na}</div>
+        <div class="score-block"><span class="pts-num" style="color:var(--a1)">${sc.a??0}</span></div>
+      </div>
+      <div class="score-sep-col">
+        <div class="score-sep">–</div>
+        <div style="font-size:11px;color:var(--muted)">Inn ${inn}${half}</div>
+        <div style="font-size:13px;letter-spacing:2px">${baseDots}</div>
+        <div style="font-size:11px;color:var(--muted)">${outDots} out</div>
+      </div>
+      <div class="team-side right">
+        <div class="team-name" style="color:var(--b1)">${nb}</div>
+        <div class="score-block"><span class="pts-num" style="color:var(--b1)">${sc.b??0}</span></div>
+      </div>`;
+
+  } else if (st === 'runs_cr') {
+    // Cricket: A 142/3 (18.2) – B: 120/5 (20.0)  Inn 2
+    const runsA = sc.runs_a ?? 0, wicketsA = sc.wickets_a ?? 0, oversA = sc.overs_a ?? '0.0';
+    const runsB = sc.runs_b ?? 0, wicketsB = sc.wickets_b ?? 0, oversB = sc.overs_b ?? '0.0';
+    const inn = sc.innings ?? 1;
+    html = `
+      <div class="team-side">
+        <div class="team-name" style="color:var(--a1)">${na}</div>
+        <div class="score-block">
+          <span class="pts-num" style="color:var(--a1);font-size:24px">${runsA}/${wicketsA}</span>
+        </div>
+        <div class="sub-score">(${oversA} ov)</div>
+      </div>
+      <div class="score-sep-col">
+        <div class="score-sep">–</div>
+        <div style="font-size:11px;color:var(--muted)">Inn ${inn}</div>
+      </div>
+      <div class="team-side right">
+        <div class="team-name" style="color:var(--b1)">${nb}</div>
+        <div class="score-block" style="flex-direction:row-reverse">
+          <span class="pts-num" style="color:var(--b1);font-size:24px">${runsB}/${wicketsB}</span>
+        </div>
+        <div class="sub-score" style="text-align:right">(${oversB} ov)</div>
+      </div>`;
+
+  } else {
+    // Fallback generic
+    html = `
+      <div class="team-side">
+        <div class="team-name" style="color:var(--a1)">${na}</div>
+        <div class="score-block"><span class="pts-num" style="color:var(--a1)">${sc.a??0}</span></div>
+      </div>
+      <div class="score-sep-col"><div class="score-sep">–</div></div>
+      <div class="team-side right">
+        <div class="team-name" style="color:var(--b1)">${nb}</div>
+        <div class="score-block"><span class="pts-num" style="color:var(--b1)">${sc.b??0}</span></div>
+      </div>`;
+  }
+
+  row.innerHTML = html;
+  updateAwardButtons();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SPEED HUD
+// ═══════════════════════════════════════════════════════════════
+function updateSpeedHud() {
+  document.getElementById('d-speed').textContent =
+    S.speedKmh !== null ? Math.round(S.speedKmh) + ' km/h' : '— km/h';
+
+  const sc = S.score || {};
+  const st = SPORTS[S.selectedSport]?.scoreType || 'goals';
+  let extra = '';
+  if (st === 'tennis') {
+    const setNo = (sc.sets_a ?? 0) + (sc.sets_b ?? 0) + 1;
+    extra = `<div>Set ${setNo}</div>${sc.in_tiebreak ? '<div style="font-size:11px;color:var(--accent2)">TIEBREAK</div>' : ''}`;
+  } else if (st === 'points') {
+    if (sc.quarter) extra = `<div>Quarter ${sc.quarter}</div>`;
+  } else if (st === 'runs_bb') {
+    if (sc.inning) extra = `<div>Inning ${sc.inning}</div>`;
+  }
+  document.getElementById('d-extra-info').innerHTML = extra;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RADAR CANVAS
+// ═══════════════════════════════════════════════════════════════
+let radarCanvas, radarCtx, radarPPM = 22;
+
+function initRadarCanvas() {
+  radarCanvas = document.getElementById('radar');
+  radarCtx = radarCanvas.getContext('2d');
+  const wrap = document.getElementById('radar-wrap');
+  const sport = SPORTS[S.selectedSport] || SPORTS.soccer;
+  const COURT_W = sport.w;
+  const COURT_L = sport.l;
+  const maxW = wrap.clientWidth  || 360;
+  const maxH = wrap.clientHeight || 480;
+  // dynamic PPM
+  radarPPM = Math.min((maxH - 2 * MARGIN) / COURT_L, (maxW - 2 * MARGIN) / COURT_W);
+  const cw = Math.ceil(COURT_W * radarPPM) + 2 * MARGIN;
+  const ch = Math.ceil(COURT_L * radarPPM) + 2 * MARGIN;
+  radarCanvas.width = cw;
+  radarCanvas.height = ch;
+  drawRadar();
+}
+
+function toCanvas(mx, my) {
+  return [MARGIN + mx * radarPPM, MARGIN + my * radarPPM];
+}
+
+// ── Court drawing helpers ──────────────────────────────────────
+function drawCourt(ctx, sport) {
+  const W = sport.w, L = sport.l;
+  const [tx, ty] = toCanvas(0, 0);
+  const [bx, by] = toCanvas(W, L);
+  const cw = radarCanvas.width, ch = radarCanvas.height;
+
+  // Background
+  ctx.fillStyle = '#0d0d0d';
+  ctx.fillRect(0, 0, cw, ch);
+
+  if (sport.shape === 'diamond') {
+    drawBaseballField(ctx, W, L);
+    return;
+  }
+
+  // Court surface color per sport
+  const surfaceColors = {
+    soccer:       '#0a2a0a',
+    basketball:   '#2a1800',
+    volleyball:   '#1a0a2a',
+    tennis:       '#0f2f3a',
+    table_tennis: '#0a1a2a',
+    fencing:      '#1a1a0d',
+    cricket:      '#0a1f0a',
+  };
+  ctx.fillStyle = surfaceColors[S.selectedSport] || '#111827';
+  ctx.fillRect(tx, ty, bx - tx, by - ty);
+
+  // Outer boundary
+  ctx.strokeStyle = '#aac8d8'; ctx.lineWidth = 2.5;
+  ctx.strokeRect(tx + 0.5, ty + 0.5, bx - tx - 1, by - ty - 1);
+
+  const L2 = (x1, y1, x2, y2, lw, color, dash) => {
+    const [ax, ay] = toCanvas(x1, y1), [bx2, by2] = toCanvas(x2, y2);
+    ctx.save();
+    ctx.strokeStyle = color || '#aac8d8';
+    ctx.lineWidth = lw || 1.5;
+    if (dash) ctx.setLineDash(dash); else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx2, by2); ctx.stroke();
+    ctx.restore();
+  };
+
+  const ARC = (cx, cy, r, s, e, lw, color) => {
+    const [acx, acy] = toCanvas(cx, cy);
+    ctx.save();
+    ctx.strokeStyle = color || '#aac8d8';
+    ctx.lineWidth = lw || 1.5;
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(acx, acy, r * radarPPM, s, e); ctx.stroke();
+    ctx.restore();
+  };
+
+  const RECT = (x1, y1, x2, y2, fillColor, strokeColor, lw) => {
+    const [ax, ay] = toCanvas(x1, y1), [bx2, by2] = toCanvas(x2, y2);
+    if (fillColor) { ctx.fillStyle = fillColor; ctx.fillRect(ax, ay, bx2-ax, by2-ay); }
+    if (strokeColor) {
+      ctx.save(); ctx.strokeStyle = strokeColor; ctx.lineWidth = lw||1.5;
+      ctx.strokeRect(ax, ay, bx2-ax, by2-ay); ctx.restore();
+    }
+  };
+
+  const st = sport.scoreType;
+
+  if (st === 'goals') {
+    // Soccer
+    // Halfway line
+    L2(0, L/2, W, L/2, 2);
+    // Center circle ~9.15m radius
+    ARC(W/2, L/2, 9.15, 0, Math.PI*2, 1.5);
+    // Center spot
+    const [cx, cy] = toCanvas(W/2, L/2);
+    ctx.fillStyle = '#aac8d8'; ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2); ctx.fill();
+    // Penalty areas (16.5m from each goal end, 40.32m wide centered)
+    const paw = 40.32, paw2 = (W - paw) / 2;
+    RECT(paw2, 0, W-paw2, 16.5, null, '#aac8d8', 1.5);
+    RECT(paw2, L-16.5, W-paw2, L, null, '#aac8d8', 1.5);
+    // Goal area (5.5m from end, 18.32m wide)
+    const gaw = 18.32, gaw2 = (W - gaw) / 2;
+    RECT(gaw2, 0, W-gaw2, 5.5, null, '#aac8d8cc', 1);
+    RECT(gaw2, L-5.5, W-gaw2, L, null, '#aac8d8cc', 1);
+    // Penalty arcs (top of penalty area, 9.15m from penalty spot)
+    ARC(W/2, 11, 9.15, Math.PI*0.1, Math.PI*0.9, 1.5);
+    ARC(W/2, L-11, 9.15, -Math.PI*0.9, -Math.PI*0.1, 1.5);
+    // Corner arcs
+    const cornerR = 1;
+    const corners2 = [[0,0,0,Math.PI/2],[W,0,Math.PI/2,Math.PI],[0,L,-Math.PI/2,0],[W,L,Math.PI,3*Math.PI/2]];
+    for (const [cx2, cy2, s2, e2] of corners2) {
+      const [px, py] = toCanvas(cx2, cy2);
+      ctx.save(); ctx.strokeStyle='#aac8d8'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(px, py, cornerR*radarPPM, s2, e2); ctx.stroke(); ctx.restore();
+    }
+
+  } else if (st === 'points') {
+    // Basketball
+    // Half court line
+    L2(0, L/2, W, L/2, 2);
+    // Center circle
+    ARC(W/2, L/2, 1.8, 0, Math.PI*2, 1.5);
+    // Paint / key (5.8m wide, 4.9m long from baseline)
+    const kw = 4.9, kl = 5.8;
+    const kx = (W - kl) / 2;
+    RECT(kx, 0, kx+kl, kw, '#3a1800', '#aac8d8', 1.5);
+    RECT(kx, L-kw, kx+kl, L, '#3a1800', '#aac8d8', 1.5);
+    // Free-throw circle
+    ARC(W/2, kw, 1.8, 0, Math.PI*2, 1.5);
+    ARC(W/2, L-kw, 1.8, 0, Math.PI*2, 1.5);
+    // 3-point arc (~6.75m from basket, basket is ~1.575m from baseline)
+    ARC(W/2, 1.575, 6.75, Math.PI*1.1, Math.PI*1.9, 1.5);
+    ARC(W/2, L-1.575, 6.75, Math.PI*0.1, Math.PI*0.9, 1.5);
+    // 3-point corner lines
+    L2(0, 0, 0, 2.99, 2);
+    L2(W, 0, W, 2.99, 2);
+    L2(0, L, 0, L-2.99, 2);
+    L2(W, L, W, L-2.99, 2);
+
+  } else if (st === 'sets') {
+    // Volleyball
+    // Net (center line)
+    L2(0, L/2, W, L/2, 3, '#facc15');
+    // Attack lines (3m from net each side)
+    L2(0, L/2-3, W, L/2-3, 1.5, '#aac8d8', [5,4]);
+    L2(0, L/2+3, W, L/2+3, 1.5, '#aac8d8', [5,4]);
+
+  } else if (st === 'tennis') {
+    // Tennis: service boxes, net, singles sidelines
+    // Net
+    L2(0, L/2, W, L/2, 3, '#facc15');
+    // Singles sidelines (1.372m from doubles sideline, only if doubled court ~W=10.97)
+    // Service boxes: 6.4m from net
+    L2(0, L/2-6.4, W, L/2-6.4, 1.5);
+    L2(0, L/2+6.4, W, L/2+6.4, 1.5);
+    // Center service line
+    L2(W/2, L/2-6.4, W/2, L/2, 1.5, '#aac8d8', [3,4]);
+    L2(W/2, L/2, W/2, L/2+6.4, 1.5, '#aac8d8', [3,4]);
+    // Baseline extensions hint
+    L2(0, 0, W, 0, 2);
+    L2(0, L, W, L, 2);
+
+  } else if (st === 'tt') {
+    // Table tennis: net, center line
+    // Net
+    L2(0, L/2, W, L/2, 3, '#facc15');
+    // Center line
+    L2(W/2, 0, W/2, L, 1, '#aac8d8', [3,4]);
+
+  } else if (st === 'touches') {
+    // Fencing: center, warning lines 2m from each end
+    L2(0, L/2, W, L/2, 2);
+    L2(0, 2, W, 2, 1.5, '#ef4444', [5,4]);
+    L2(0, L-2, W, L-2, 1.5, '#ef4444', [5,4]);
+    // En garde lines (2m from center)
+    L2(0, L/2-2, W, L/2-2, 1.5, '#aac8d8', [3,4]);
+    L2(0, L/2+2, W, L/2+2, 1.5, '#aac8d8', [3,4]);
+
+  } else if (st === 'runs_cr') {
+    // Cricket: pitch rectangle in center (3.05m × 20.12m)
+    const pw = 3.05, pl = 17;
+    const px = (W - pw) / 2, py = (L - pl) / 2;
+    RECT(px, py, px+pw, py+pl, '#2a1a00', '#d4a055', 2);
+    // Crease lines
+    L2(px-0.5, py+1.22, px+pw+0.5, py+1.22, 1, '#fff');
+    L2(px-0.5, py+pl-1.22, px+pw+0.5, py+pl-1.22, 1, '#fff');
+    // 30-yard circle (~27.4m diameter)
+    ARC(W/2, L/2, 13.7, 0, Math.PI*2, 1.5, '#aac8d888');
+  }
+
+  // Court label
+  ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.font = 'bold 9px system-ui';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const [midX] = toCanvas(W/2, 0);
+  const [,farMidY] = toCanvas(0, L*0.25);
+  const [,nearMidY] = toCanvas(0, L*0.75);
+  ctx.fillText('FAR', midX, farMidY);
+  ctx.fillText('NEAR', midX, nearMidY);
+}
+
+function drawBaseballField(ctx, W, L) {
+  const cw = radarCanvas.width, ch = radarCanvas.height;
+  ctx.fillStyle = '#0a1a00'; ctx.fillRect(0, 0, cw, ch);
+
+  // Home plate at bottom center
+  const homeX = W / 2, homeY = L * 0.85;
+  const baseSize = W * 0.05;
+
+  // Infield dirt circle
+  const [hpx, hpy] = toCanvas(homeX, homeY);
+  ctx.save();
+  ctx.fillStyle = '#3a2200';
+  ctx.beginPath();
+  ctx.arc(hpx, hpy, 27.43 * 0.35 * radarPPM, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Outfield arc
+  ctx.save();
+  ctx.strokeStyle = '#aac8d8'; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(hpx, hpy, W * 0.95 * radarPPM, Math.PI * 1.1, Math.PI * 1.9);
+  ctx.stroke();
+  ctx.restore();
+
+  // Foul lines
+  ctx.save(); ctx.strokeStyle = '#aac8d8'; ctx.lineWidth = 1.5; ctx.setLineDash([5,4]);
+  ctx.beginPath();
+  ctx.moveTo(hpx, hpy);
+  ctx.lineTo(hpx - W * radarPPM * 0.7, hpy - L * radarPPM * 0.7);
+  ctx.moveTo(hpx, hpy);
+  ctx.lineTo(hpx + W * radarPPM * 0.7, hpy - L * radarPPM * 0.7);
+  ctx.stroke(); ctx.restore();
+
+  // Bases: home, 1st (right), 2nd (top center), 3rd (left)
+  const baseLine = W * 0.27; // ~27.43m * sin45 ~= 19.4m but we use ~0.27W
+  const bases = [
+    [homeX,           homeY,              '#ff9626', 'H'],
+    [homeX + baseLine, homeY - baseLine,  '#fff',    '1'],
+    [homeX,           homeY - baseLine*2, '#fff',    '2'],
+    [homeX - baseLine, homeY - baseLine,  '#fff',    '3'],
+  ];
+  for (const [bx, by, color, label] of bases) {
+    const [px, py] = toCanvas(bx, by);
+    ctx.save();
+    ctx.fillStyle = color; ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+    ctx.translate(px, py); ctx.rotate(Math.PI/4);
+    ctx.fillRect(-baseSize*radarPPM*0.5, -baseSize*radarPPM*0.5, baseSize*radarPPM, baseSize*radarPPM);
+    ctx.restore();
+    ctx.fillStyle = '#000'; ctx.font = `bold ${Math.max(8, radarPPM*0.6)}px system-ui`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, px, py);
+  }
+
+  // Pitcher's mound
+  const [mx, my] = toCanvas(homeX, homeY - baseLine);
+  ctx.save();
+  ctx.fillStyle = '#5a3a10';
+  ctx.beginPath(); ctx.arc(mx, my, 2.7 * radarPPM * 0.15, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+// ── Main radar draw ────────────────────────────────────────────
+function drawRadar() {
+  if (!radarCanvas || !radarCtx) return;
+  const ctx = radarCtx;
+  const sport = SPORTS[S.selectedSport] || SPORTS.soccer;
+  drawCourt(ctx, sport);
+
+  const nearPlayers = S.players.filter(p => p.half === 'near');
+  const farPlayers  = S.players.filter(p => p.half === 'far');
+
+  // Trails
+  for (const [tid, trail] of Object.entries(S.trails)) {
+    if (trail.length < 2) continue;
+    const p = S.players.find(p => String(p.tid) === tid);
+    const ni = nearPlayers.findIndex(q => q.tid === p?.tid);
+    const fi = farPlayers.findIndex(q => q.tid === p?.tid);
+    let color = BALL_COLOR;
+    if (p) color = p.half === 'near' ? (ni === 0 ? A1_COLOR : A2_COLOR)
+                                     : (fi === 0 ? B1_COLOR : B2_COLOR);
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath();
+    trail.forEach(({x, y}, i) => {
+      const [cx, cy] = toCanvas(x, y);
+      i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
+    });
+    ctx.globalAlpha = 0.45; ctx.stroke(); ctx.globalAlpha = 1;
+  }
+
+  // Players
+  for (const p of S.players) {
+    const [cx, cy] = toCanvas(p.x_m, p.y_m);
+    const ni = nearPlayers.findIndex(q => q.tid === p.tid);
+    const fi = farPlayers.findIndex(q => q.tid === p.tid);
+    const color = p.half === 'near' ? (ni === 0 ? A1_COLOR : A2_COLOR)
+                                    : (fi === 0 ? B1_COLOR : B2_COLOR);
+    const label = p.half === 'near'
+      ? `A${ni + 1}` : `B${fi + 1}`;
+    ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = '#000'; ctx.font = 'bold 8px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, cx, cy);
+  }
+
+  // Ball
+  if (S.ball) {
+    const [cx, cy] = toCanvas(S.ball.x_m, S.ball.y_m);
+    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2);
+    ctx.fillStyle = BALL_COLOR; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RALLY LOG
+// ═══════════════════════════════════════════════════════════════
+function updateRallyLog() {
+  const el = document.getElementById('rally-log');
+  el.innerHTML = S.rallyLog.slice(0, 8).map(r =>
+    `<div class="rally-item">Rally ${r.n}: <span class="winner">${r.winner}</span> wins${r.speed ? ` · ${Math.round(r.speed)} km/h` : ''}</div>`
+  ).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MATCH RECORDS
+// ═══════════════════════════════════════════════════════════════
+async function saveMatchRecord(r) {
+  const sc = r.score || {};
+  const sport = SPORTS[S.selectedSport] || {};
+  const record = {
+    id: new Date().toISOString(),
+    date: new Date().toLocaleDateString(),
+    sport: S.selectedSport,
+    name_a: sc.name_a || S.nameA,
+    name_b: sc.name_b || S.nameB,
+    score_a: sc.sets_a ?? sc.games_a ?? sc.a ?? 0,
+    score_b: sc.sets_b ?? sc.games_b ?? sc.b ?? 0,
+    winner: sc.winner,
+    peak_speed_kmh: Math.round(S.peakSpeed),
+    duration_s: S.matchStartTime ? Math.round((Date.now() - S.matchStartTime) / 1000) : null,
+  };
+  try {
+    await fetch(S.serverUrl + '/history', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(record),
+    });
+  } catch (e) { console.warn('Could not save to server:', e); }
+  const local = JSON.parse(localStorage.getItem('history') || '[]');
+  local.unshift(record);
+  localStorage.setItem('history', JSON.stringify(local.slice(0, 100)));
+}
+
+async function loadHistory() {
+  const el = document.getElementById('history-list');
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Loading...</div>';
+  let records = [];
+  try {
+    const r = await fetch(S.serverUrl + '/history');
+    if (r.ok) records = await r.json();
+  } catch (_) {}
+  if (!records.length) records = JSON.parse(localStorage.getItem('history') || '[]');
+  if (!records.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">No matches recorded yet.</div>';
+    return;
+  }
+  el.innerHTML = records.map(g => {
+    const sp = SPORTS[g.sport];
+    const emoji = sp ? sp.emoji : '🏟️';
+    const winnerName = g.winner === 'A' ? g.name_a : g.winner === 'B' ? g.name_b : null;
+    const winColor = g.winner === 'A' ? 'var(--a1)' : 'var(--b1)';
+    return `
+    <div class="game-card">
+      <div class="game-header">
+        <div>
+          <div style="font-size:13px;font-weight:600">${emoji} ${g.name_a} vs ${g.name_b}</div>
+          <div class="game-score" style="color:${winColor}">${g.score_a ?? '?'} – ${g.score_b ?? '?'}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="game-date">${g.date}</div>
+          ${winnerName ? `<div style="font-size:12px;color:var(--accent);margin-top:4px">${winnerName} wins</div>` : ''}
+        </div>
+      </div>
+      <div class="game-stats">
+        ${g.peak_speed_kmh ? `<span>⚡ <b>${g.peak_speed_kmh}</b> km/h peak</span>` : ''}
+        ${g.duration_s ? `<span>⏱ <b>${Math.round(g.duration_s/60)}</b> min</span>` : ''}
+        ${sp ? `<span>🏟️ <b>${sp.name}</b></span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MATCH OVER
+// ═══════════════════════════════════════════════════════════════
+function showMatchOver(r) {
+  const sc = r.score || {};
+  const winName = sc.winner === 'A' ? (sc.name_a || S.nameA) : (sc.name_b || S.nameB);
+  document.getElementById('mo-winner').textContent = winName + ' Wins! 🏆';
+  const sa = sc.sets_a ?? sc.games_a ?? sc.a ?? 0;
+  const sb = sc.sets_b ?? sc.games_b ?? sc.b ?? 0;
+  document.getElementById('mo-score').textContent = `${sa} – ${sb}`;
+  document.getElementById('match-overlay').classList.add('show');
+}
+
+function closeOverlay() {
+  document.getElementById('match-overlay').classList.remove('show');
+  go('history');
+}
+
+function newGame() {
+  document.getElementById('match-overlay').classList.remove('show');
+  S.rallyLog = []; S.trails = {}; S.peakSpeed = 0; S.rallyCount = 0;
+  S.matchSaved = false; S.matchStartTime = null; S.score = {};
+  go('home');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════
+window.onload = () => {
+  buildSportGrid();
+  // Restore inputs from localStorage
+  if (S.nameA) document.getElementById('name-a').value = S.nameA;
+  if (S.nameB) document.getElementById('name-b').value = S.nameB;
+
+  // Restore sport selection state
+  if (S.selectedSport) {
+    selectSport(S.selectedSport);
+    // Re-highlight without event
+    document.querySelectorAll('.sport-btn').forEach(b => {
+      const key = b.getAttribute('onclick')?.match(/selectSport\('(\w+)'\)/)?.[1];
+      if (key === S.selectedSport) b.classList.add('selected');
+      else b.classList.remove('selected');
+    });
+  }
+
+  if (S.serverUrl) {
+    document.getElementById('main-nav').style.display = 'flex';
+    connectDisplay();
+  }
+  window.addEventListener('resize', () => {
+    if (currentPage === 'display') initRadarCanvas();
+  });
+};
+</script>
+</body>
+</html>
