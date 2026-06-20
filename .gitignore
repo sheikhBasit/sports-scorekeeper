@@ -15,6 +15,7 @@ out*.mp4
 runs/
 .DS_Store
 _kg_stream/
+_kg_test/kernel.py
 data/
 samples/
 third_party/
