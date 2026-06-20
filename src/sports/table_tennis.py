@@ -51,4 +51,6 @@ SPORTS['table_tennis'] = SportConfig(
     use_tracknet=True,
     scoring_cls=TableTennisScoring,
     court_shape='rect',
+
+    rf_ball_model=None,  # TrackNetV3 handles ball
 )

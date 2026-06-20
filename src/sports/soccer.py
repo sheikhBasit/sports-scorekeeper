@@ -26,4 +26,5 @@ SPORTS['soccer'] = SportConfig(
     use_tracknet=False,
     scoring_cls=SoccerScoring,
     court_shape='rect',
+    rf_ball_model='roboflow-100/football-players-detection-3zvbc/2',
 )

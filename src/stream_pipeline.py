@@ -1,9 +1,13 @@
 """
 Sport-agnostic real-time streaming pipeline.
 
-Uses a SportConfig to determine court dimensions, ball detection strategy,
-players per team, scoring class, and TrackNet usage.
+Ball detection priority chain (first available wins):
+  1. TrackNetV3         — tennis, table tennis (small fast balls)
+  2. Roboflow Universe  — sport-specific fine-tuned model via inference SDK
+  3. YOLO class 32      — generic sports_ball fallback
+  4. None               — fencing (no ball, touch detection via proximity)
 """
+import os
 import cv2
 import numpy as np
 import supervision as sv
@@ -22,12 +26,20 @@ SPEED_DECAY_FRAMES = 60
 RALLY_GAP_FRAMES   = 45
 MIN_RALLY_FRAMES   = 15
 
+# Roboflow model output class names that map to "ball"
+_BALL_CLASS_NAMES = {
+    'ball', 'football', 'basketball', 'volleyball', 'baseball',
+    'cricket ball', 'cricket-ball', 'tennis ball', 'tennis-ball',
+    'ping pong ball', 'ping-pong-ball', 'shuttlecock', 'puck',
+}
+
 
 class StreamPipeline:
     def __init__(self, sport: SportConfig, mapper: CourtMapper,
                  model_path='yolo11n.pt', conf=0.25, court_margin=0.4,
                  tracknet_repo=None, tracknet_ckpt=None, inpaint_ckpt=None,
-                 fps=10.0, scoring_kwargs=None, names=None):
+                 fps=10.0, scoring_kwargs=None, names=None,
+                 rf_api_key=None):
 
         self.sport = sport
         self.mapper = mapper
@@ -41,12 +53,32 @@ class StreamPipeline:
         self.court_margin = court_margin
         self.tracker = sv.ByteTrack()
 
-        # ball tracking
-        self._tracknet = None
+        # ── ball detector priority chain ──────────────────────────────────────
+        self._tracknet   = None
+        self._rf_detector = None
         self._frame_buf: deque = deque(maxlen=3)
+
+        # 1. TrackNetV3
         if tracknet_repo and sport.use_tracknet:
-            self._tracknet = _TrackNetInference(
-                tracknet_repo, tracknet_ckpt, inpaint_ckpt, device)
+            try:
+                self._tracknet = _TrackNetInference(
+                    tracknet_repo, tracknet_ckpt, inpaint_ckpt, device)
+                print(f'[pipeline] TrackNetV3 loaded for {sport.key}', flush=True)
+            except Exception as e:
+                print(f'[pipeline] TrackNetV3 failed: {e}', flush=True)
+
+        # 2. Roboflow Universe model
+        if not self._tracknet and sport.rf_ball_model:
+            api_key = rf_api_key or os.environ.get('ROBOFLOW_API_KEY')
+            if api_key:
+                try:
+                    self._rf_detector = _RoboflowDetector(sport.rf_ball_model, api_key)
+                    print(f'[pipeline] Roboflow model loaded: {sport.rf_ball_model}', flush=True)
+                except Exception as e:
+                    print(f'[pipeline] Roboflow model failed ({sport.rf_ball_model}): {e}', flush=True)
+            else:
+                print(f'[pipeline] No ROBOFLOW_API_KEY — skipping Roboflow model, '
+                      f'using YOLO class {sport.ball_coco_class}', flush=True)
 
         # scoring
         self._match = sport.scoring_cls(**(scoring_kwargs or {}))
@@ -70,16 +102,21 @@ class StreamPipeline:
             'sport': self.sport.key,
         }
 
-        # player detection — use supervision annotators for consistency
+        # ── players via YOLO ──────────────────────────────────────────────────
+        # Only request YOLO ball class as last resort (no RF model, no tracknet)
+        use_yolo_ball = (
+            self.sport.ball_coco_class is not None
+            and not self._tracknet
+            and not self._rf_detector
+        )
         classes = [PERSON_CLASS_ID]
-        if self.sport.ball_coco_class is not None and not self._tracknet:
+        if use_yolo_ball:
             classes.append(self.sport.ball_coco_class)
 
-        preds = self.model(frame, conf=self.conf, device=self.device,
-                           verbose=False, classes=classes)[0]
+        preds   = self.model(frame, conf=self.conf, device=self.device,
+                             verbose=False, classes=classes)[0]
         det_all = sv.Detections.from_ultralytics(preds)
 
-        # players
         det_p = det_all[det_all.class_id == PERSON_CLASS_ID]
         det_p = filter_to_court(det_p, self.mapper, self.court_margin)
         if len(det_p):
@@ -111,46 +148,42 @@ class StreamPipeline:
                     'half': 'far' if m[1] < self.mapper.court_l / 2 else 'near',
                 })
 
-        # ball via TrackNetV3
+        # ── ball detection ────────────────────────────────────────────────────
         ball_visible = False
         self._frame_buf.append((frame_idx, frame))
+
+        # 1. TrackNetV3
         if self._tracknet and len(self._frame_buf) == 3:
             bx, by, vis = self._tracknet.predict(list(self._frame_buf))
             if vis:
                 ball_visible = True
-                bm = self.mapper.to_metres([[bx, by]])[0]
-                result['ball'] = {
-                    'x': round(bx, 1), 'y': round(by, 1),
-                    'x_m': round(float(bm[0]), 3),
-                    'y_m': round(float(bm[1]), 3),
-                }
-                self._ball_history.append((frame_idx, bx, by))
-                self._last_ball_idx = frame_idx
-                self._update_speed()
+                self._record_ball(result, frame_idx, bx, by)
 
-        # ball via YOLO class (non-tracknet sports)
-        elif self.sport.ball_coco_class is not None and not self._tracknet:
+        # 2. Roboflow Universe model
+        elif self._rf_detector:
+            det_b = self._rf_detector.detect(frame)
+            if len(det_b):
+                best = int(np.argmax(det_b.confidence))
+                bx1, by1, bx2, by2 = det_b.xyxy[best]
+                bx, by = (bx1 + bx2) / 2, (by1 + by2) / 2
+                ball_visible = True
+                self._record_ball(result, frame_idx, float(bx), float(by))
+
+        # 3. YOLO class 32 fallback
+        elif use_yolo_ball:
             det_b = det_all[det_all.class_id == self.sport.ball_coco_class]
             if len(det_b):
                 best = int(np.argmax(det_b.confidence))
                 bx1, by1, bx2, by2 = det_b.xyxy[best]
                 bx, by = (bx1 + bx2) / 2, (by1 + by2) / 2
-                bm = self.mapper.to_metres([[bx, by]])[0]
-                result['ball'] = {
-                    'x': round(float(bx), 1), 'y': round(float(by), 1),
-                    'x_m': round(float(bm[0]), 3),
-                    'y_m': round(float(bm[1]), 3),
-                }
                 ball_visible = True
-                self._ball_history.append((frame_idx, bx, by))
-                self._last_ball_idx = frame_idx
-                self._update_speed()
+                self._record_ball(result, frame_idx, float(bx), float(by))
 
         if (self._last_speed is not None and
                 frame_idx - self._last_ball_idx < SPEED_DECAY_FRAMES):
             result['speed_kmh'] = round(self._last_speed, 1)
 
-        # rally state machine
+        # ── rally state machine ───────────────────────────────────────────────
         if ball_visible:
             self._rally_frames += 1
             self._invisible_frames = 0
@@ -164,6 +197,16 @@ class StreamPipeline:
         result['rally_active'] = self._rally_active
         result['score'] = self._score_snap()
         return result
+
+    def _record_ball(self, result, frame_idx, bx, by):
+        bm = self.mapper.to_metres([[bx, by]])[0]
+        result['ball'] = {
+            'x': round(bx, 1), 'y': round(by, 1),
+            'x_m': round(float(bm[0]), 3), 'y_m': round(float(bm[1]), 3),
+        }
+        self._ball_history.append((frame_idx, bx, by))
+        self._last_ball_idx = frame_idx
+        self._update_speed()
 
     def _update_speed(self):
         if len(self._ball_history) >= 3:
@@ -201,6 +244,36 @@ class StreamPipeline:
         return {**s, 'name_a': self.names['A'], 'name_b': self.names['B']}
 
 
+# ── Roboflow Universe detector ────────────────────────────────────────────────
+
+class _RoboflowDetector:
+    """
+    Wraps the Roboflow `inference` SDK. Loads the model once, caches locally.
+    Returns sv.Detections filtered to ball-related classes only.
+    """
+    def __init__(self, model_id: str, api_key: str):
+        from inference import get_model
+        self._model = get_model(model_id, api_key=api_key)
+        self._model_id = model_id
+        print(f'[roboflow] {model_id} ready', flush=True)
+
+    def detect(self, frame: np.ndarray) -> sv.Detections:
+        results = self._model.infer(frame)[0]
+        det = sv.Detections.from_inference(results)
+        if len(det) == 0:
+            return det
+        # Filter to ball-related predictions only
+        if hasattr(det, 'data') and 'class_name' in det.data:
+            names = np.array([n.lower() for n in det.data['class_name']])
+            mask = np.array([n in _BALL_CLASS_NAMES for n in names])
+            if mask.any():
+                return det[mask]
+            # Model may only output balls (no class name filtering needed)
+        return det
+
+
+# ── TrackNetV3 inference ──────────────────────────────────────────────────────
+
 class _TrackNetInference:
     def __init__(self, repo: str, tracknet_ckpt: str, inpaint_ckpt: str, device: str):
         import sys as _sys
@@ -213,7 +286,6 @@ class _TrackNetInference:
 
         self.device = device
         self.H, self.W = 288, 512
-        self.sigma = 2.5
 
         self.tracknet = TrackNet(in_dim=9, out_dim=3)
         self.tracknet.load_state_dict(

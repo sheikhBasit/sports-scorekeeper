@@ -41,4 +41,6 @@ SPORTS['fencing'] = SportConfig(
     use_tracknet=False,
     scoring_cls=FencingScoring,
     court_shape='rect',
+
+    rf_ball_model=None,
 )

@@ -51,4 +51,6 @@ SPORTS['volleyball'] = SportConfig(
     use_tracknet=False,
     scoring_cls=VolleyballScoring,
     court_shape='rect',
+
+    rf_ball_model='roboflow-100/volleyball-players-detection/2',
 )

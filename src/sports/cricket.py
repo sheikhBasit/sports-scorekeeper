@@ -71,4 +71,6 @@ SPORTS['cricket'] = SportConfig(
     use_tracknet=False,
     scoring_cls=CricketScoring,
     court_shape='rect',
+
+    rf_ball_model='roboflow-100/cricket-ball-detection/1',
 )

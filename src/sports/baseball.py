@@ -56,4 +56,6 @@ SPORTS['baseball'] = SportConfig(
     use_tracknet=False,
     scoring_cls=BaseballScoring,
     court_shape='diamond',
+
+    rf_ball_model='roboflow-100/baseball-detection/2',
 )

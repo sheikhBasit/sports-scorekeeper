@@ -6,3 +6,4 @@ fastapi>=0.111
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
 pyngrok>=7.0
+inference>=0.9.0

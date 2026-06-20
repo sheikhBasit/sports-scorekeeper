@@ -36,4 +36,6 @@ SPORTS['basketball'] = SportConfig(
     use_tracknet=False,
     scoring_cls=BasketballScoring,
     court_shape='rect',
+
+    rf_ball_model='roboflow-100/basketball-players-detection/1',
 )
